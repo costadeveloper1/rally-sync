@@ -37,7 +37,7 @@ export class DiscordBot {
       ],
     });
 
-    this.client.once('ready', async () => {
+    this.client.once('clientReady', async () => {
       console.log(`🤖 [Discord Bot] Logged in as ${this.client?.user?.tag}!`);
       await this.registerCommands();
       this.startVoiceTicker();
@@ -71,13 +71,13 @@ export class DiscordBot {
   }
 
   /**
-   * Register slash commands (/rally, /join, /leave)
+   * Register slash commands (/rally, /join, /leave) without removing the Discord Activity Entry Point
    */
   private async registerCommands(): Promise<void> {
     if (!this.client?.user) return;
     const rest = new REST({ version: '10' }).setToken(config.discordBotToken);
 
-    const commands = [
+    const newCommands = [
       new SlashCommandBuilder()
         .setName('rally')
         .setDescription('Open the Rally Sync Control Panel and Team Selector'),
@@ -90,10 +90,22 @@ export class DiscordBot {
     ].map((cmd) => cmd.toJSON());
 
     try {
+      // 1. Fetch existing commands to preserve the Activity Primary Entry Point command (type 4)
+      const existingCommands = (await rest.get(
+        Routes.applicationCommands(this.client.user.id)
+      )) as any[];
+
+      const entryPointCommands = Array.isArray(existingCommands)
+        ? existingCommands.filter((cmd) => cmd.type === 4)
+        : [];
+
+      // 2. Combine entry point commands with new slash commands
+      const combinedCommands = [...entryPointCommands, ...newCommands];
+
       await rest.put(Routes.applicationCommands(this.client.user.id), {
-        body: commands,
+        body: combinedCommands,
       });
-      console.log('✅ [Discord Bot] Slash commands registered successfully.');
+      console.log('✅ [Discord Bot] Slash commands registered successfully (Activity Entry Point preserved).');
     } catch (err) {
       console.error('[Discord Bot] Error registering slash commands:', err);
     }

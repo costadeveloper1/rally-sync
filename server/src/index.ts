@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { config } from './config.js';
 import { RallyEngine } from './rallyEngine.js';
 import { setupSocketHandlers } from './socketHandler.js';
+import { DiscordBot } from './bot/discordBot.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +21,10 @@ app.use(express.json());
 
 // Initialize Rally State Engine
 const engine = new RallyEngine();
+
+// Initialize Discord Bot (Voice + Chat Launcher)
+const bot = new DiscordBot(engine);
+bot.start().catch((err) => console.error('[Bot Start Error]', err));
 
 // Setup WebSocket server
 const io = new Server(server, {

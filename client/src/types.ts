@@ -1,4 +1,5 @@
 export type RallyStatus = 'idle' | 'countdown' | 'in_march' | 'finished';
+export type TeamId = 'primary' | 'secondary';
 
 export interface RallyPlayer {
   id: string;
@@ -9,6 +10,7 @@ export interface RallyPlayer {
 
 export interface RallyRoomState {
   channelId: string;
+  teamId?: TeamId;
   rallyDuration: 300 | 600;
   prepWindow: 10 | 20 | 60;
   status: RallyStatus;

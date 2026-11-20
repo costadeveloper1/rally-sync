@@ -155,17 +155,18 @@ export class DiscordBot {
     const customId = interaction.customId;
 
     if (customId.startsWith('team_select:')) {
-      const teamId = customId.split(':')[1];
+      const parts = customId.split(':');
+      const teamId = parts[1]; // 'primary' or 'secondary'
+
       const teamNames: Record<string, string> = {
-        '1': 'Team 1 (Main Target)',
-        '2': 'Team 2 (Flank Target)',
-        '3': 'Team 3 (Support)',
+        primary: '🏰 Primary Rally (Main Target)',
+        secondary: '🏹 Secondary Rally (Flank / Alt Target)',
       };
 
       const selectedName = teamNames[teamId] || `Team ${teamId}`;
 
       await interaction.reply({
-        content: `✅ You selected **${selectedName}**! Open the Rally Sync Activity to view and coordinate your team's launch times.`,
+        content: `⚔️ You selected **${selectedName}**!\nClick the rocket icon 🚀 in the voice channel to open **Rally Sync** directly on this team.`,
         ephemeral: true,
       });
     } else if (customId === 'voice_join_bot') {
@@ -239,16 +240,12 @@ export class DiscordBot {
   private createTeamButtons(): ActionRowBuilder<ButtonBuilder> {
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId('team_select:1')
-        .setLabel('🏰 Team 1')
+        .setCustomId('team_select:primary')
+        .setLabel('🏰 Primary Rally')
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId('team_select:2')
-        .setLabel('🏹 Team 2')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId('team_select:3')
-        .setLabel('🛡️ Team 3')
+        .setCustomId('team_select:secondary')
+        .setLabel('🏹 Secondary Rally')
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId('voice_join_bot')
@@ -258,7 +255,7 @@ export class DiscordBot {
   }
 
   /**
-   * Ticker that syncs with RallyEngine and announces countdown in voice
+   * Ticker that syncs with RallyEngine and announces countdown in voice for both teams
    */
   private startVoiceTicker(): void {
     if (this.tickerInterval) clearInterval(this.tickerInterval);
@@ -272,36 +269,43 @@ export class DiscordBot {
       for (const guild of this.client.guilds.cache.values()) {
         if (!voiceManager.isConnected(guild.id)) continue;
 
-        // Iterate over engine rooms for this guild/channels
-        // Rooms can be mapped by channelId
         for (const channel of guild.channels.cache.values()) {
           if (!channel.isVoiceBased()) continue;
 
-          // Check default room or team rooms
-          const room = this.engine.getOrCreateRoom(channel.id);
-          if (room.status !== 'countdown' && room.status !== 'in_march') continue;
+          // Check both primary and secondary teams
+          const teams: Array<{ id: 'primary' | 'secondary'; label: string }> = [
+            { id: 'primary', label: 'Primary' },
+            { id: 'secondary', label: 'Secondary' },
+          ];
 
-          for (const player of room.players) {
-            if (!player.departureTimeUtc) continue;
+          for (const team of teams) {
+            const room = this.engine.getOrCreateRoom(channel.id, team.id);
+            if (room.status !== 'countdown' && room.status !== 'in_march') continue;
 
-            const diffSeconds = Math.ceil((player.departureTimeUtc - now) / 1000);
+            for (const player of room.players) {
+              if (!player.departureTimeUtc) continue;
 
-            // Announce 3, 2, 1
-            if (diffSeconds >= 1 && diffSeconds <= 3) {
-              const alertKey = `${channel.id}_${player.id}_${diffSeconds}`;
-              if (!this.triggeredVoiceAlerts.has(alertKey)) {
-                this.triggeredVoiceAlerts.add(alertKey);
-                const words: Record<number, string> = { 3: 'Three', 2: 'Two', 1: 'One' };
-                await voiceManager.speak(guild.id, words[diffSeconds]);
+              const diffSeconds = Math.ceil((player.departureTimeUtc - now) / 1000);
+
+              // Announce 3, 2, 1
+              if (diffSeconds >= 1 && diffSeconds <= 3) {
+                const alertKey = `${channel.id}_${team.id}_${player.id}_${diffSeconds}`;
+                if (!this.triggeredVoiceAlerts.has(alertKey)) {
+                  this.triggeredVoiceAlerts.add(alertKey);
+                  const words: Record<number, string> = { 3: 'Three', 2: 'Two', 1: 'One' };
+                  const prefix = team.id === 'secondary' ? 'Secondary ' : '';
+                  await voiceManager.speak(guild.id, `${prefix}${words[diffSeconds]}`);
+                }
               }
-            }
 
-            // Announce GO!
-            if (diffSeconds === 0) {
-              const alertKey = `${channel.id}_${player.id}_0_go`;
-              if (!this.triggeredVoiceAlerts.has(alertKey)) {
-                this.triggeredVoiceAlerts.add(alertKey);
-                await voiceManager.speak(guild.id, `${player.name}, Go!`);
+              // Announce GO!
+              if (diffSeconds === 0) {
+                const alertKey = `${channel.id}_${team.id}_${player.id}_0_go`;
+                if (!this.triggeredVoiceAlerts.has(alertKey)) {
+                  this.triggeredVoiceAlerts.add(alertKey);
+                  const prefix = team.id === 'secondary' ? 'Secondary: ' : '';
+                  await voiceManager.speak(guild.id, `${prefix}${player.name}, Go!`);
+                }
               }
             }
           }

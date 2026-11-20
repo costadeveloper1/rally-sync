@@ -2,8 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { setupDiscordSdk, isEmbeddedInDiscord } from './discord.js';
 import { soundManager } from './audioAlert.js';
-import { RallyRoomState, ClientUser } from './types.js';
+import { RallyRoomState, ClientUser, TeamId } from './types.js';
 import { Header } from './components/Header.js';
+import { TeamSelector } from './components/TeamSelector.js';
 import { CountdownBanner } from './components/CountdownBanner.js';
 import { CoordinatorBar } from './components/CoordinatorBar.js';
 import { PlayerList } from './components/PlayerList.js';
@@ -17,6 +18,7 @@ export const App: React.FC = () => {
     isCoordinator: true,
   });
   const [channelId, setChannelId] = useState<string>('voice-channel');
+  const [currentTeam, setCurrentTeam] = useState<TeamId>('primary');
   const [roomState, setRoomState] = useState<RallyRoomState>({
     channelId: 'voice-channel',
     rallyDuration: 300,
@@ -65,6 +67,7 @@ export const App: React.FC = () => {
         socket.on('connect', () => {
           socket.emit('room:join', {
             channelId: detectedChannel,
+            teamId: 'primary',
             user: authedUser,
           });
           socket.emit('time:ping', { clientTime: Date.now() });
@@ -214,6 +217,17 @@ export const App: React.FC = () => {
     socketRef.current?.emit('list:clear');
   };
 
+  const handleSelectTeam = (team: TeamId) => {
+    if (team === currentTeam) return;
+    setCurrentTeam(team);
+    triggeredSoundsRef.current.clear();
+    socketRef.current?.emit('room:join', {
+      channelId,
+      teamId: team,
+      user,
+    });
+  };
+
   const handleToggleMute = () => {
     const muted = soundManager.toggleMute();
     setIsMuted(muted);
@@ -255,6 +269,16 @@ export const App: React.FC = () => {
             </button>
           </div>
         )}
+
+        {/* Team Selector Tab (Primary vs Secondary Rally) */}
+        <TeamSelector
+          currentTeam={currentTeam}
+          onSelectTeam={handleSelectTeam}
+          primaryCount={currentTeam === 'primary' ? roomState.players.length : 0}
+          secondaryCount={currentTeam === 'secondary' ? roomState.players.length : 0}
+          primaryActive={currentTeam === 'primary' && roomState.status !== 'idle'}
+          secondaryActive={currentTeam === 'secondary' && roomState.status !== 'idle'}
+        />
 
         {/* Hero Countdown / Next Call Banner */}
         <CountdownBanner state={roomState} currentUtcTime={currentUtcTime} />

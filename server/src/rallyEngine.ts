@@ -1,16 +1,25 @@
-import { RallyPlayer, RallyRoomState, RallyStatus } from './types.js';
+import { RallyPlayer, RallyRoomState, RallyStatus, TeamId } from './types.js';
 
 export class RallyEngine {
   private rooms: Map<string, RallyRoomState> = new Map();
 
   /**
+   * Helper to format room key by channel and team
+   */
+  public getRoomKey(channelId: string, teamId: TeamId = 'primary'): string {
+    return `${channelId}:${teamId}`;
+  }
+
+  /**
    * Get existing room or create default initialized room
    */
-  public getOrCreateRoom(channelId: string): RallyRoomState {
-    let room = this.rooms.get(channelId);
+  public getOrCreateRoom(channelId: string, teamId: TeamId = 'primary'): RallyRoomState {
+    const key = this.getRoomKey(channelId, teamId);
+    let room = this.rooms.get(key);
     if (!room) {
       room = {
         channelId,
+        teamId,
         rallyDuration: 300, // 5 minutes default
         prepWindow: 20,     // 20 seconds default
         status: 'idle',
@@ -20,7 +29,7 @@ export class RallyEngine {
         players: [],
         updatedAt: Date.now(),
       };
-      this.rooms.set(channelId, room);
+      this.rooms.set(key, room);
     }
     return room;
   }
@@ -28,8 +37,13 @@ export class RallyEngine {
   /**
    * Upsert a player by name. If name exists (case-insensitive), update their march time.
    */
-  public upsertPlayer(channelId: string, name: string, marchTimeSeconds: number): RallyRoomState {
-    const room = this.getOrCreateRoom(channelId);
+  public upsertPlayer(
+    channelId: string,
+    name: string,
+    marchTimeSeconds: number,
+    teamId: TeamId = 'primary'
+  ): RallyRoomState {
+    const room = this.getOrCreateRoom(channelId, teamId);
     const trimmedName = name.trim();
     if (!trimmedName || marchTimeSeconds <= 0) return room;
 
@@ -62,8 +76,8 @@ export class RallyEngine {
   /**
    * Remove a player by id
    */
-  public removePlayer(channelId: string, playerId: string): RallyRoomState {
-    const room = this.getOrCreateRoom(channelId);
+  public removePlayer(channelId: string, playerId: string, teamId: TeamId = 'primary'): RallyRoomState {
+    const room = this.getOrCreateRoom(channelId, teamId);
     room.players = room.players.filter((p) => p.id !== playerId);
 
     if (room.status === 'countdown' || room.status === 'in_march') {
@@ -77,8 +91,8 @@ export class RallyEngine {
   /**
    * Clear all players from room
    */
-  public clearPlayers(channelId: string): RallyRoomState {
-    const room = this.getOrCreateRoom(channelId);
+  public clearPlayers(channelId: string, teamId: TeamId = 'primary'): RallyRoomState {
+    const room = this.getOrCreateRoom(channelId, teamId);
     room.players = [];
     room.status = 'idle';
     room.startTimeUtc = null;
@@ -94,9 +108,10 @@ export class RallyEngine {
   public startRally(
     channelId: string,
     rallyDuration?: 300 | 600,
-    prepWindow?: 10 | 20 | 60
+    prepWindow?: 10 | 20 | 60,
+    teamId: TeamId = 'primary'
   ): RallyRoomState {
-    const room = this.getOrCreateRoom(channelId);
+    const room = this.getOrCreateRoom(channelId, teamId);
 
     if (rallyDuration) room.rallyDuration = rallyDuration;
     if (prepWindow) room.prepWindow = prepWindow;
@@ -114,8 +129,8 @@ export class RallyEngine {
   /**
    * Reset rally: recalculates based on current UTC time keeping all players
    */
-  public resetRally(channelId: string): RallyRoomState {
-    return this.startRally(channelId);
+  public resetRally(channelId: string, teamId: TeamId = 'primary'): RallyRoomState {
+    return this.startRally(channelId, undefined, undefined, teamId);
   }
 
   /**
